@@ -1,0 +1,64 @@
+:root {
+    --radius:5px;
+    --padding:5px;
+}
+
+.container {
+    display:grid;
+    height:100vh;
+    gap:0.1rem;
+    grid-template-columns: 0.4fr 0.6fr;
+    grid-template-rows: 0.25fr 0.5fr 0.25fr;
+    grid-template-areas: "nav    nav"
+                         "side   main"
+                         "footer footer";
+}
+
+nav {
+    grid-area: nav;
+    background: gainsboro ;
+    border-radius: var(--radius);
+    padding: var(--padding);
+}
+nav > button {
+    border-radius: var(--radius);
+    margin-right: 5px;
+}
+nav > form {
+    display: inline-block;
+    border-radius: var(--radius);
+}
+nav > form > * {
+    border-radius: var(--radius);
+    margin-right: 5px;
+}
+#side {
+    grid-area: side;
+    background: gainsboro ;
+    border-radius: var(--radius);
+    padding: var(--padding);
+}
+main {
+    grid-area: main;
+    background: gainsboro ;
+    border-radius: var(--radius);
+    padding: var(--padding);
+}
+footer {
+    grid-area: footer;
+    background: gainsboro ;
+    border-radius: var(--radius);
+    padding: var(--padding);
+}
+
+@media only screen and (max-width:500px)  {
+    .container {
+        grid-template-columns: 1fr;
+        grid-template-rows: 2fr 4fr 3fr 1fr;
+        grid-template-areas: "nav"
+                             "side"
+                             "main"
+                             "footer";
+    }
+
+}

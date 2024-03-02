@@ -20,6 +20,7 @@ export interface DBManager<T extends TProvideNumericID> {
   clearAll: () => Promise<void>
 }
 
+
 // Define a class for the database manager
 export async function  mkDBManager<T extends TProvideNumericID>(dbName:string, storeName:string, version:number):Promise<DBManager<T>> {
 

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react"
+import './index.css'
+import { forwardRef, useEffect, useRef, useState } from "react"
 import { TNote } from "./model/TNote"
 import { useAppContext } from "./provider/AppContextProvider"
+import { ReplicationProvider, ReplicationProviderRef } from "./provider/ReplicationProvider"
+import useReactThrow from "./assets/hooks/useReactThrow"
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -20,14 +23,20 @@ async function fetchNotesMock() : Promise<TNote[]> {
       ]), 500))
 }
 
+const TNoteReplicationProvider = forwardRef(ReplicationProvider<TNote>)
+
 function App() {
   // TODO clear Database
+  const reactThrow = useReactThrow()
   const [status, setStatus] = useState<"ready" | "loading" |  "saving" | "error" >("loading")
   const [onlyUnfinished, setOnlyUnfinished]  = useState<boolean>(false)
   const [filter, setFilter] = useState<string>("")
-  const [reload, triggerReload] = useState<boolean>(true)
+  const [reload, setTriggerReload] = useState<boolean>(true)
   const [notes, setNotes] = useState<TNote[]>([])
+  const [selected, setSelected] = useState<TNote | null>(null)
   const {dbmanager} = useAppContext()
+  const replicationProviderRef = useRef<ReplicationProviderRef>(null)
+  function triggerReload () {setTriggerReload(f=>!f)}
 
   // TODO, this effect relies on several dependencies, dbmanager is async, so it is initially later available than the others...
   //       is there a better solution, than letting the effect fire several times
@@ -45,29 +54,50 @@ function App() {
                   )
           setStatus("ready")
         }
-      })()
+      })().catch(reason => reactThrow(new Error(reason)))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loading only happens initialy
   },[dbmanager, onlyUnfinished, filter, reload])
+  useEffect(() => {
+    replicationProviderRef.current?.stop()
+  },[replicationProviderRef])
+  console.log(replicationProviderRef.current?.isRunning())
   return (
     <>
-      <h1>Notes with indexDB</h1>
-      <NewNoteForm onSubmit={async (newNote:TNote)=> {
-        setStatus("saving")
-        const newId = await dbmanager.add(newNote)
-        setNotes([...notes, {...newNote, id:newId}])
-        setStatus("ready") }}/>
-      <FilterForm onFinishFilterChange={f=>{ setOnlyUnfinished(f) }}
-                  onFilterChange={s=>setFilter(s)} />
-
-      <ul>
-        {status === "ready" ?
-        notes.map(
-          (n) => 
-            <li key={n.id}><Note note={n} onDelete={() => triggerReload(r=>!r)}/></li>
-        )
-        :
-        <span>{status}</span>}
-      </ul>
+      <TNoteReplicationProvider ref={replicationProviderRef} dbmanager={dbmanager} />
+      <div className='container'>
+        <nav>
+          <h1>Notes with indexDB</h1>
+          <label >{replicationProviderRef.current?.isRunning() ? "replication acitve" : "replication not active"}</label>
+          <button onClick={()=>{replicationProviderRef.current?.stop(); triggerReload()}}>Stop Replication</button>
+          <button onClick={()=>{replicationProviderRef.current?.start(); triggerReload()}}>Restart Replication</button>
+          <NewNoteForm onSubmit={async (newNote:TNote)=> {
+            setStatus("saving")
+            const newId = await dbmanager.add(newNote)
+            setNotes([...notes, {...newNote, id:newId}])
+            setStatus("ready") }}/>
+        </nav>
+        <div id="side">
+            <ul>
+              {status === "ready" ?
+              notes.map(
+                (n, i) => 
+                  <li key={n.id}><Note key={n.id} note={n} onSelect={() => {console.log(i, notes[i]);setSelected(notes[i])}} onDelete={() => triggerReload(r=>!r)}/></li>
+              )
+              :
+              <span>{status}</span>}
+          </ul>
+        </div>
+        <main>
+          { 
+            selected && 
+            <Note key={selected.id} note={selected} />
+          }
+        </main>
+        <footer>
+          <FilterForm onFinishFilterChange={f=>{ setOnlyUnfinished(f) }}
+                      onFilterChange={s=>setFilter(s)} />
+        </footer>
+      </div>
     </>
   )
 }
@@ -102,10 +132,11 @@ function NewNoteForm({onSubmit}:{onSubmit:(newNote:TNote)=>void}) {
 
 interface NoteParams {
   note:TNote
-  onDelete:(key?:number) => void
+  onSelect?:(key:number) => void
+  onDelete?:(key?:number) => void
   onFinished?:(n:TNote) => void
 }
-function Note({note, onDelete, onFinished}:NoteParams) {
+function Note({note, onSelect, onDelete, onFinished}:NoteParams) {
   // TODO maybe it would be better to write to the storage in calling component via callbacks?
   const [value, setValue] = useState<TNote>(note)
   const {dbmanager} = useAppContext()
@@ -120,16 +151,27 @@ function Note({note, onDelete, onFinished}:NoteParams) {
                 dbmanager.update(newValue)
                 if(onFinished) onFinished(newValue)
               }}/>
-      <span>{value.id}</span>
-      <span>{value.caption}</span>
-      <span>{value.text}</span>
-      <span onClick={()=>{
-              const delKey = value.id
-              if(delKey) {
-                dbmanager.del(delKey)
-                onDelete(delKey)
+              <span onClick={() => {
+                      const key = value.id
+                      if(key) {
+                        onSelect && onSelect(key)
+                      }
+                    }}>
+                <span>{value.id}</span>
+                <span>{value.caption}</span>
+                <span>{value.text}</span>
+              </span>
+              {onDelete && 
+                  <span onClick={()=>{
+                          const delKey = value.id
+                          if(delKey) {
+                            dbmanager.del(delKey)
+                            onDelete && onDelete(delKey)
+                          }
+                        }}>
+                    &nbsp;⌦
+                  </span>
               }
-            }}>&nbsp;⌦</span>
     </>
   )
 } 
@@ -163,9 +205,7 @@ function FilterForm({onFinishFilterChange, onFilterChange}:FilterFormProps) {
                 onChange={(e)=>{
 //                    setFilter(e.target.value)
                     onFilterChange(e.target.value)
-                }} />
-
-      </span>
+                }} /></span>
     </form>
   )
 }
